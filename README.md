@@ -8,7 +8,7 @@ This repository serves as a practical learning resource for understanding the co
 
 ## Contents
 
-### KV-Cache Implementation (`kv_cache_consolidated.py`)
+### KV-Cache Implementation (`kv_caching.py`)
 
 A comprehensive implementation demonstrating Key-Value caching in transformer language models:
 
@@ -28,7 +28,7 @@ A comprehensive implementation demonstrating Key-Value caching in transformer la
 
 **Usage:**
 ```bash
-python kv_cache_consolidated.py
+python kv_cache.py
 ```
 
 Choose from:
