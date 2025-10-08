@@ -28,42 +28,54 @@ uv pip install -e .
 
 ## Contents
 
-### KV-Cache Implementation (`kv_caching.py`)
+This repository contains educational implementations of state-of-the-art (SOTA) techniques used in modern large language models.
 
-A comprehensive implementation demonstrating Key-Value caching in transformer language models:
+### SOTA Implementations
 
-- **Full transformer architecture** with multi-head attention and KV-cache support
-- **Generation functions** comparing performance with and without caching
-- **Performance benchmarking** utilities for measuring speedup and memory usage
-- **Detailed experiments** with visualizations showing:
-  - Speedup vs sequence length (O(n²) → O(n) improvement)
-  - Memory usage scaling (linear growth with sequence length)
-  - Computational complexity analysis
+#### 1. **KV-Cache** ([kv_caching.py](kv_caching.py))
+Essential optimization for efficient autoregressive generation.
+- Full transformer architecture with KV-cache support
+- Performance benchmarking showing O(n²) → O(n) improvement
+- Memory usage analysis and visualizations
+- Used in: All modern LLMs (GPT, LLaMA, Claude, etc.)
 
-**Key Features:**
-- Demonstrates why KV-caching is essential for efficient LLM inference
-- Shows practical speedup improvements (increasing with longer sequences)
-- Includes memory overhead analysis
-- Provides both educational demonstrations and experimental validation
+#### 2. **Positional Embeddings** ([positional_embeddings.py](positional_embeddings.py))
+Methods for encoding position information in sequences.
+- **Sinusoidal Positional Embeddings** - Original Transformer approach
+- **RoPE (Rotary Position Embeddings)** - Relative position encoding
+- Comparative visualizations and attention pattern analysis
+- Used in: RoPE in LLaMA, GPT-NeoX, PaLM
 
-**Usage:**
-```bash
-python kv_cache.py
-```
+#### 3. **SwiGLU Activation** ([swiglu.py](swiglu.py))
+Advanced activation function combining Swish with gating mechanism.
+- SwiGLU feed-forward network implementation
+- Comparison with traditional ReLU/GELU activations
+- Performance benchmarks and gradient flow analysis
+- Used in: LLaMA, PaLM, GPT-4 (rumored)
 
-Choose from:
-1. Basic demonstration (quick comparison)
-2. Full experiments with plots
-3. Both
+#### 4. **Grouped-Query Attention (GQA)** ([grouped_query_attention.py](grouped_query_attention.py))
+Memory-efficient attention mechanism reducing KV cache size.
+- Multi-Head Attention (MHA) baseline implementation
+- Grouped-Query Attention with shared KV heads
+- Memory efficiency comparisons (up to 8x reduction)
+- Used in: LLaMA 2, Mistral, Mixtral
+
+#### 5. **Multi-Head Latent Attention (MLA)** ([multihead_latent_attention.py](multihead_latent_attention.py))
+Advanced attention with latent KV compression for extreme memory efficiency.
+- Low-dimensional latent space compression
+- 4-8x memory reduction compared to standard attention
+- Autoregressive generation with compressed caching
+- Used in: DeepSeek-V2, DeepSeek-V3
 
 ## Learning Goals
 
 This repository aims to help you understand:
 
 - **Transformer architecture fundamentals** - attention mechanisms, multi-head attention, feedforward networks
-- **Optimization techniques** - KV-caching for efficient autoregressive generation
+- **SOTA optimization techniques** - KV-caching, GQA, MLA for efficient inference
+- **Modern architectural components** - RoPE, SwiGLU, advanced attention mechanisms
 - **Performance analysis** - benchmarking, complexity analysis, memory profiling
-- **Implementation details** - from-scratch transformer implementation in PyTorch
+- **Implementation details** - from-scratch implementations in PyTorch
 
 ## Requirements
 
@@ -75,11 +87,13 @@ pip install torch matplotlib numpy
 
 Planned additions to this learning repository:
 
-- [ ] Positional encodings (absolute, relative, RoPE)
+- [x] Positional encodings (Sinusoidal, RoPE)
+- [x] Advanced attention mechanisms (GQA, MLA)
+- [x] Modern activation functions (SwiGLU)
 - [ ] Training loops and optimization strategies
 - [ ] Fine-tuning techniques (LoRA, QLoRA, prefix tuning)
 - [ ] Tokenization and vocabulary construction
-- [ ] Attention variants (flash attention, sparse attention)
+- [ ] Flash Attention and other attention optimizations
 - [ ] Model parallelism and distributed training
 - [ ] Quantization and compression techniques
 - [ ] Evaluation metrics and benchmarking
