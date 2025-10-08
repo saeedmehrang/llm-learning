@@ -1,0 +1,83 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# Jupyter Notebook
+.ipynb_checkpoints
+*.ipynb_checkpoints/
+
+# Data files
+*.csv
+*.h5
+*.hdf5
+*.parquet
+*.feather
+*.pkl
+*.pickle
+data/
+datasets/
+raw_data/
+processed_data/
+
+# Model files
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.bin
+models/
+checkpoints/
+saved_models/
+weights/
+
+# Logs and outputs
+logs/
+*.log
+runs/
+outputs/
+wandb/
+mlruns/
+lightning_logs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Environment variables
+.env
+.env.local
+
+# Cache
+.cache/
+*.cache
+
+# Artifacts
+artifacts/
