@@ -58,159 +58,145 @@ long-context processing.
 Author: LLM Learning Repository
 Date: 2025-01-15
 """
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import math
 
-
 class MultiHeadLatentAttention(nn.Module):
     """
-    Multi-head Latent Attention (MLA) with KV-compression.
-
-    This module implements an efficient attention mechanism where keys and values
-    are compressed into a low-dimensional latent space for caching, reducing memory
-    requirements during autoregressive generation.
-
-    Args:
-        d_model (int): Model dimension (e.g., 512, 768)
-        num_heads (int): Number of attention heads (e.g., 8, 12)
-        d_latent (int): Latent dimension for KV compression (e.g., 128, 256)
-                       Typically d_latent << d_model for memory savings
-        dropout (float): Dropout probability (default: 0.1)
-
-    Attributes:
-        W_q (nn.Linear): Query projection matrix
-        W_kv_compress (nn.Linear): Compression matrix for K and V
-        W_k_decompress (nn.Linear): Decompression matrix for keys
-        W_v_decompress (nn.Linear): Decompression matrix for values
-        W_o (nn.Linear): Output projection matrix
-
-    Example:
-        >>> mla = MultiHeadLatentAttention(d_model=512, num_heads=8, d_latent=128)
-        >>> x = torch.randn(2, 10, 512)
-        >>> output, cache = mla(x, use_cache=True)
-        >>> print(f"Output: {output.shape}, Cache: {cache['kv_latent'].shape}")
-        Output: torch.Size([2, 10, 512]), Cache: torch.Size([2, 10, 128])
+    Multi-Head Latent Attention (MLA) implementation with low-rank factorization 
+    for all Q, K, and V projections, and shared compression for KV.
     """
-
-    def __init__(self, d_model: int, num_heads: int, d_latent: int, dropout: float = 0.1):
+    def __init__(self, d_model, num_heads, d_latent, dropout=0.1):
         super().__init__()
+	"""
+	Initializes the MultiHeadLatentAttention module.
 
+	Args:
+	    d_model (int): Model dimension (i.e., the hidden size of the input and output, 
+		           e.g., 512, 768). This must be divisible by `num_heads`.
+	    num_heads (int): Number of attention heads (e.g., 8, 12).
+	    d_latent (int): Latent dimension ($r$) used for low-rank compression of 
+		            the Query (Q), Key (K), and Value (V) projections (e.g., 128, 256). 
+		            This is significantly smaller than `d_model` and enables 
+		            efficient KV cache storage.
+	    dropout (float, optional): Dropout probability applied to the attention weights. 
+		                       Defaults to 0.1.
+	"""
         assert d_model % num_heads == 0, "d_model must be divisible by num_heads"
-
+        
         self.d_model = d_model
         self.num_heads = num_heads
         self.d_head = d_model // num_heads
         self.d_latent = d_latent
         self.scale = math.sqrt(self.d_head)
-
-        # Query projection (standard, per-head)
-        self.W_q = nn.Linear(d_model, d_model)
-
-        # KV compression: project to low-dimensional latent space
+        
+        # === Q Compression and Decompression ===
+        # Q Compression (W^D_Q): project to latent space
+        self.W_q_compress = nn.Linear(d_model, d_latent)
+        # Q Decompression (W^U_Q): expand from latent space to full Q dimension
+        self.W_q_decompress = nn.Linear(d_latent, d_model)
+        
+        # === KV Compression and Decompression ===
+        # KV Compression (W^D_KV): shared projection to low-dimensional latent space
         self.W_kv_compress = nn.Linear(d_model, d_latent)
-
-        # KV decompression: expand from latent space to per-head K and V
+        
+        # K Decompression (W^U_K): expand from latent space to full K dimension
         self.W_k_decompress = nn.Linear(d_latent, d_model)
+        # V Decompression (W^U_V): expand from latent space to full V dimension
         self.W_v_decompress = nn.Linear(d_latent, d_model)
-
+        
         # Output projection
         self.W_o = nn.Linear(d_model, d_model)
-
+        
         self.dropout = nn.Dropout(dropout)
-
+        
     def forward(self, x, mask=None, cache=None, use_cache=False):
         """
-        Forward pass with optional KV-caching using latent compression.
-
         Args:
-            x (torch.Tensor): Input tensor of shape [batch_size, seq_len, d_model]
-            mask (torch.Tensor, optional): Attention mask of shape [batch_size, seq_len, seq_len]
-                                          Values of 0 will be masked out
-            cache (dict, optional): Dictionary containing cached 'kv_latent' from previous steps
-            use_cache (bool): If True, return updated cache for next iteration
-
+            x: Input tensor [batch_size, seq_len, d_model]
+            mask: Attention mask [batch_size, seq_len, seq_len]
+            cache: Dictionary containing cached 'kv_latent' from previous steps
+            use_cache: Whether to return cache for next step
+            
         Returns:
-            tuple: (output, cache) where:
-                - output (torch.Tensor): Attention output [batch_size, seq_len, d_model]
-                - cache (dict or None): Updated cache if use_cache=True, containing:
-                    - 'kv_latent': Compressed representation [batch, cached_seq_len, d_latent]
-
-        Example:
-            >>> mla = MultiHeadLatentAttention(512, 8, 128)
-            >>> x = torch.randn(2, 10, 512)
-            >>>
-            >>> # First forward pass
-            >>> out1, cache = mla(x, use_cache=True)
-            >>>
-            >>> # Second forward pass with cache
-            >>> x_new = torch.randn(2, 1, 512)
-            >>> out2, cache = mla(x_new, cache=cache, use_cache=True)
-            >>> print(cache['kv_latent'].shape)  # [2, 11, 128] - cache grows
+            output: [batch_size, seq_len, d_model]
+            cache: (optional) Dictionary with cached latent representations
         """
         batch_size, seq_len, _ = x.shape
-
-        # ========== Query Projection (Standard) ==========
-        # Project queries and split into heads
-        Q = self.W_q(x)  # [batch, seq_len, d_model]
+        
+        # ========== Query Compression & Decompression (Factorized Q) ==========
+        # 1. Compression: C_Q = X W^D_Q
+        q_latent = self.W_q_compress(x)  # [batch, seq_len, d_latent]
+        
+        # 2. Decompression: Q = C_Q W^U_Q
+        Q = self.W_q_decompress(q_latent) # [batch, seq_len, d_model]
+        
+        # Split Q into heads
         Q = Q.view(batch_size, seq_len, self.num_heads, self.d_head)
         Q = Q.transpose(1, 2)  # [batch, num_heads, seq_len, d_head]
-
-        # ========== KV Compression ==========
-        # Compress K and V into shared latent representation
+        
+        # ========== KV Compression & Caching ==========
+        # 1. Compression: C_KV = X W^D_KV
         kv_latent = self.W_kv_compress(x)  # [batch, seq_len, d_latent]
-
+        
         # Handle caching for autoregressive generation
-        if cache is not None:
+        if cache is not None and 'kv_latent' in cache:
             # Concatenate with previous cached latent representations
             kv_latent = torch.cat([cache['kv_latent'], kv_latent], dim=1)
-
-        # ========== KV Decompression ==========
-        # Expand latent representation back to full K and V
+        
+        # ========== KV Decompression (Factorized K and V) ==========
+        # 2. Decompression: K = C_KV W^U_K and V = C_KV W^U_V
+        
+        # The total sequence length in the cache
+        cached_seq_len = kv_latent.shape[1]
+        
         K = self.W_k_decompress(kv_latent)  # [batch, cached_seq_len, d_model]
         V = self.W_v_decompress(kv_latent)  # [batch, cached_seq_len, d_model]
-
-        # Split into heads
-        cached_seq_len = kv_latent.shape[1]
+        
+        # Split K and V into heads
         K = K.view(batch_size, cached_seq_len, self.num_heads, self.d_head)
         K = K.transpose(1, 2)  # [batch, num_heads, cached_seq_len, d_head]
-
+        
         V = V.view(batch_size, cached_seq_len, self.num_heads, self.d_head)
         V = V.transpose(1, 2)  # [batch, num_heads, cached_seq_len, d_head]
-
+        
         # ========== Attention Computation ==========
-        # Compute attention scores
+        # Compute attention scores: (Q K^T) / sqrt(d_k)
         scores = torch.matmul(Q, K.transpose(-2, -1)) / self.scale
         # [batch, num_heads, seq_len, cached_seq_len]
-
+        
         # Apply mask if provided
         if mask is not None:
+            # We assume the mask is compatible with the Q and KV sequence lengths
             scores = scores.masked_fill(mask == 0, float('-inf'))
-
+        
         # Apply softmax and dropout
         attn_weights = F.softmax(scores, dim=-1)
         attn_weights = self.dropout(attn_weights)
-
-        # Apply attention to values
+        
+        # Apply attention to values: Attention(Q, K, V)
         attn_output = torch.matmul(attn_weights, V)
         # [batch, num_heads, seq_len, d_head]
-
+        
         # ========== Output Projection ==========
         # Concatenate heads
-        attn_output = attn_output.transpose(1, 2)  # [batch, seq_len, num_heads, d_head]
+        attn_output = attn_output.transpose(1, 2)
         attn_output = attn_output.contiguous().view(batch_size, seq_len, self.d_model)
-
+        
         # Final linear projection
         output = self.W_o(attn_output)
-
+        
         # Prepare cache for next step if needed
         new_cache = None
         if use_cache:
+            # NOTE: We cache the shared latent representation C_KV
             new_cache = {'kv_latent': kv_latent}
-
+        
         return output, new_cache
+        
+
 
 
 # ============================================================================
