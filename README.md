@@ -6,6 +6,26 @@ A collection of code and tools for learning the fundamental principles of traini
 
 This repository serves as a practical learning resource for understanding the core concepts and techniques involved in building, training, and fine-tuning language models from scratch.
 
+## Environment Setup
+
+**Install uv if you haven't**
+
+`curl -LsSf https://astral.sh/uv/install.sh | sh`
+
+**Create virtual environment and install dependencies**
+
+´´´
+uv venv
+source .venv/bin/activate  # or `.venv/Scripts/activate` on Windows
+uv pip install -e .
+´´´
+
+**Or use uv sync for more advanced dependency management**
+
+
+`uv sync`
+
+
 ## Contents
 
 ### KV-Cache Implementation (`kv_caching.py`)
